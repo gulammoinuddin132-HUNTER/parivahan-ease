@@ -91,7 +91,7 @@ function ApplyPage() {
     return out;
   }, [form]);
 
-  const stepValid = STEP_FIELDS[step].every((f) => !errors[f]);
+  const stepValid = (STEP_FIELDS[step] ?? []).every((f) => !errors[f]);
 
   function set(field: keyof Form, value: string) {
     setForm((f) => ({
@@ -192,7 +192,7 @@ function ApplyPage() {
         onSubmit={(e) => {
           e.preventDefault();
           if (step < 2) {
-            STEP_FIELDS[step].forEach((f) => setTouched((t) => ({ ...t, [f]: true })));
+            (STEP_FIELDS[step] ?? []).forEach((f) => setTouched((t) => ({ ...t, [f]: true })));
             if (stepValid) setStep(step + 1);
             return;
           }
@@ -359,7 +359,7 @@ function ApplyPage() {
           >
             {step < 2 ? "Save and continue" : "Pay ₹ 416 and submit"}
           </button>
-          {!stepValid && STEP_FIELDS[step].some((f) => touched[f]) && (
+          {!stepValid && (STEP_FIELDS[step] ?? []).some((f) => touched[f]) && (
             <p role="alert" className="w-full text-sm font-medium text-destructive">
               Fix the highlighted fields above to continue.
             </p>

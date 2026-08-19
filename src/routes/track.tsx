@@ -66,7 +66,7 @@ const TONES: Record<App["tone"], string> = {
 };
 
 function TrackPage() {
-  const [open, setOpen] = useState(APPS[0].ref);
+  const [open, setOpen] = useState(APPS[0]?.ref ?? "");
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
