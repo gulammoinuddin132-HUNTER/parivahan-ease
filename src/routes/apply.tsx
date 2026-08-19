@@ -79,7 +79,7 @@ const STEP_FIELDS: Array<Array<keyof Form>> = [
 function ApplyPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Form>(EMPTY);
-  const [touched, setTouched] = useState<Partial Record<keyof Form, boolean>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const errors = useMemo(() => {
