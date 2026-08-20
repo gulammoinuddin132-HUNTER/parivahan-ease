@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApplyRouteImport } from './routes/apply'
+import { Route as RedesignRouteImport } from './routes/redesign'
 import { Route as TrackRouteImport } from './routes/track'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const ApplyRoute = ApplyRouteImport.update({
   path: '/apply',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedesignRoute = RedesignRouteImport.update({
+  id: '/redesign',
+  path: '/redesign',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrackRoute = TrackRouteImport.update({
   id: '/track',
   path: '/track',
@@ -32,30 +38,34 @@ const TrackRoute = TrackRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/apply' | '/track'
+  fullPaths: '/' | '/apply' | '/redesign' | '/track'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/apply' | '/track'
-  id: '__root__' | '/' | '/apply' | '/track'
+  to: '/' | '/apply' | '/redesign' | '/track'
+  id: '__root__' | '/' | '/apply' | '/redesign' | '/track'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApplyRoute: typeof ApplyRoute
+  RedesignRoute: typeof RedesignRoute
   TrackRoute: typeof TrackRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApplyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/redesign': {
+      id: '/redesign'
+      path: '/redesign'
+      fullPath: '/redesign'
+      preLoaderRoute: typeof RedesignRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/track': {
       id: '/track'
       path: '/track'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApplyRoute: ApplyRoute,
+  RedesignRoute: RedesignRoute,
   TrackRoute: TrackRoute,
 }
 export const routeTree = rootRouteImport
