@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApplyRouteImport } from './routes/apply'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as RedesignRouteImport } from './routes/redesign'
 import { Route as TrackRouteImport } from './routes/track'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApplyRoute = ApplyRouteImport.update({
   id: '/apply',
   path: '/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RedesignRoute = RedesignRouteImport.update({
@@ -38,12 +44,14 @@ const TrackRoute = TrackRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/auth': typeof AuthRoute
   '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/auth': typeof AuthRoute
   '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/apply': typeof ApplyRoute
+  '/auth': typeof AuthRoute
   '/redesign': typeof RedesignRoute
   '/track': typeof TrackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/apply' | '/redesign' | '/track'
+  fullPaths: '/' | '/apply' | '/auth' | '/redesign' | '/track'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/apply' | '/redesign' | '/track'
-  id: '__root__' | '/' | '/apply' | '/redesign' | '/track'
+  to: '/' | '/apply' | '/auth' | '/redesign' | '/track'
+  id: '__root__' | '/' | '/apply' | '/auth' | '/redesign' | '/track'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApplyRoute: typeof ApplyRoute
+  AuthRoute: typeof AuthRoute
   RedesignRoute: typeof RedesignRoute
   TrackRoute: typeof TrackRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/apply'
       fullPath: '/apply'
       preLoaderRoute: typeof ApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/redesign': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApplyRoute: ApplyRoute,
+  AuthRoute: AuthRoute,
   RedesignRoute: RedesignRoute,
   TrackRoute: TrackRoute,
 }
