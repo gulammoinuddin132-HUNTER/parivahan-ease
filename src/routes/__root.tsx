@@ -7,9 +7,12 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import emblem from "../assets/ashoka-emblem.png";
+import { GovBar } from "../components/gov-bar";
+import { supabase } from "../integrations/supabase/client";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 const NAV = [
@@ -20,21 +23,39 @@ const NAV = [
 ] as const;
 
 function SiteHeader() {
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setSignedIn(Boolean(data.session));
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session));
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur">
       <div className="gov-stripe h-1 w-full" aria-hidden="true" />
+      <GovBar />
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
         <Link to="/" className="flex items-center gap-3">
-          <span
-            className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-display text-lg font-bold"
-            aria-hidden="true"
-          >
-            प
-          </span>
+          <img
+            src={emblem}
+            width={40}
+            height={40}
+            alt="Ashoka Lion Capital emblem — Parivahan Sewa 2.0 home"
+            className="h-10 w-10"
+          />
           <span className="leading-tight">
             <span className="block font-display text-base font-semibold">Parivahan Sewa 2.0</span>
             <span className="block text-xs text-muted-foreground">
-              Redesign prototype · MoRTH concept
+              Ministry of Road Transport &amp; Highways · redesign prototype
             </span>
           </span>
         </Link>
@@ -50,11 +71,28 @@ function SiteHeader() {
               {item.label}
             </Link>
           ))}
+          {signedIn ? (
+            <Link
+              to="/dashboard"
+              activeProps={{ className: "bg-primary/90" }}
+              className="tap-target inline-flex items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"
+            >
+              My account
+            </Link>
+          ) : (
+            <Link
+              to="/auth"
+              className="tap-target inline-flex items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
       </div>
     </header>
   );
 }
+
 
 function SiteFooter() {
   return (
