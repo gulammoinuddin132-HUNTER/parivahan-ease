@@ -1,34 +1,35 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+
+import { supabase } from "@/integrations/supabase/client";
+import { RTOS, SERVICES, getService, rupees } from "@/lib/services";
 
 export const Route = createFileRoute("/apply")({
+  validateSearch: (search: Record<string, unknown>): { service?: string } => {
+    const service = typeof search.service === "string" ? search.service : undefined;
+    return service ? { service } : {};
+  },
   head: () => ({
     meta: [
-      { title: "Apply — Guided Licence Renewal | Parivahan Sewa 2.0" },
+      { title: "Apply — Guided Transport Application | Parivahan Sewa 2.0" },
       {
         name: "description",
         content:
-          "A three-step guided application with inline real-time validation, plain-language help text and a persistent progress indicator.",
+          "A three-step guided application with inline real-time validation, live fee calculation and a real saved record in your account.",
       },
-      { property: "og:title", content: "Apply — Guided Licence Renewal | Parivahan Sewa 2.0" },
+      { property: "og:title", content: "Apply — Guided Transport Application" },
       {
         property: "og:description",
         content:
-          "Multi-step transport application form with accessible inline validation and no full-page reloads.",
+          "Pick any transport service and complete it in three accessible steps with inline validation.",
       },
     ],
   }),
   component: ApplyPage,
 });
 
-const STEPS = ["Identity", "Vehicle & RTO", "Review & pay"] as const;
-
-const STATES: Record<string, string[]> = {
-  "Maharashtra": ["MH01 Mumbai Central", "MH12 Pune", "MH20 Aurangabad"],
-  "Karnataka": ["KA01 Bengaluru Central", "KA41 Bengaluru North", "KA20 Mangaluru"],
-  "West Bengal": ["WB01 Kolkata (Beltala)", "WB02 Kolkata (Kasba)", "WB74 Siliguri"],
-  "Delhi": ["DL01 Mall Road", "DL03 Sheikh Sarai", "DL12 Vasant Vihar"],
-};
+const STEPS = ["Identity", "Service & RTO", "Review & pay"] as const;
 
 type Form = {
   name: string;
@@ -41,46 +42,80 @@ type Form = {
 
 const EMPTY: Form = { name: "", mobile: "", dl: "", state: "", rto: "", vehicle: "" };
 
-function validate(field: keyof Form, value: string, form: Form): string | null {
-  switch (field) {
-    case "name":
-      if (!value.trim()) return "Enter the name printed on your licence.";
-      if (value.trim().length < 3) return "Name looks too short — use your full name.";
-      return null;
-    case "mobile":
-      if (!/^\d{10}$/.test(value)) return "Enter the 10-digit mobile number linked to Aadhaar.";
-      return null;
-    case "dl":
-      if (!/^[A-Z]{2}[0-9]{2}\s?[0-9]{4,11}$/i.test(value.trim()))
-        return "Format: two letters, two digits, then the number — for example MH12 20190001234.";
-      return null;
-    case "state":
-      if (!value) return "Choose the state that issued your licence.";
-      return null;
-    case "rto":
-      if (!value) return "Choose your RTO office.";
-      if (form.state && !STATES[form.state]?.includes(value)) return "Pick an RTO in the chosen state.";
-      return null;
-    case "vehicle":
-      if (!/^[A-Z]{2}\s?[0-9]{1,2}\s?[A-Z]{1,3}\s?[0-9]{1,4}$/i.test(value.trim()))
-        return "Enter a registration number like MH 12 AB 1234.";
-      return null;
-    default:
-      return null;
-  }
-}
-
-const STEP_FIELDS: Array<Array<keyof Form>> = [
-  ["name", "mobile", "dl"],
-  ["state", "rto", "vehicle"],
-  [],
-];
-
 function ApplyPage() {
+  const { service: serviceKey } = Route.useSearch();
+  const navigate = useNavigate();
+  const service = getService(serviceKey);
+
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Form>(EMPTY);
   const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [reference, setReference] = useState<string | null>(null);
+
+  const sessionQuery = useQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data.user ?? null;
+    },
+  });
+
+  const profileQuery = useQuery({
+    queryKey: ["profile"],
+    enabled: Boolean(sessionQuery.data),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, phone, state, rto")
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    const p = profileQuery.data;
+    if (!p) return;
+    setForm((f) => ({
+      ...f,
+      name: f.name || p.full_name || "",
+      mobile: f.mobile || p.phone || "",
+      state: f.state || p.state || "",
+      rto: f.rto || p.rto || "",
+    }));
+  }, [profileQuery.data]);
+
+  const validate = (field: keyof Form, value: string, current: Form): string | null => {
+    switch (field) {
+      case "name":
+        if (!value.trim()) return "Enter the name printed on your government ID.";
+        if (value.trim().length < 3) return "Name looks too short — use your full name.";
+        return null;
+      case "mobile":
+        if (!/^\d{10}$/.test(value)) return "Enter the 10-digit mobile number linked to Aadhaar.";
+        return null;
+      case "dl":
+        if (!service.needs.licence) return null;
+        if (!/^[A-Z]{2}[0-9]{2}\s?[0-9]{4,11}$/i.test(value.trim()))
+          return "Format: two letters, two digits, then the number — e.g. MH12 20190001234.";
+        return null;
+      case "state":
+        if (!value) return "Choose your state.";
+        return null;
+      case "rto":
+        if (!value) return "Choose your RTO office.";
+        if (current.state && !RTOS[current.state]?.includes(value))
+          return "Pick an RTO in the chosen state.";
+        return null;
+      case "vehicle":
+        if (!service.needs.vehicle) return null;
+        if (!/^[A-Z]{2}\s?[0-9]{1,2}\s?[A-Z]{1,3}\s?[0-9]{1,4}$/i.test(value.trim()))
+          return "Enter a registration number like MH 12 AB 1234.";
+        return null;
+      default:
+        return null;
+    }
+  };
 
   const errors = useMemo(() => {
     const out: Partial<Record<keyof Form, string>> = {};
@@ -89,16 +124,19 @@ function ApplyPage() {
       if (e) out[k] = e;
     });
     return out;
-  }, [form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, service.key]);
 
-  const stepValid = (STEP_FIELDS[step] ?? []).every((f) => !errors[f]);
+  const stepFields: Array<Array<keyof Form>> = [
+    ["name", "mobile", ...(service.needs.licence ? (["dl"] as const) : [])],
+    ["state", "rto", ...(service.needs.vehicle ? (["vehicle"] as const) : [])],
+    [],
+  ];
+  const currentFields = stepFields[step] ?? [];
+  const stepValid = currentFields.every((f) => !errors[f]);
 
   function set(field: keyof Form, value: string) {
-    setForm((f) => ({
-      ...f,
-      [field]: value,
-      ...(field === "state" ? { rto: "" } : null),
-    }));
+    setForm((f) => ({ ...f, [field]: value, ...(field === "state" ? { rto: "" } : null) }));
   }
 
   function fieldProps(field: keyof Form) {
@@ -114,7 +152,35 @@ function ApplyPage() {
     } as const;
   }
 
-  if (submitted) {
+  const submit = useMutation({
+    mutationFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) throw new Error("SIGN_IN_REQUIRED");
+      const { data, error } = await supabase
+        .from("applications")
+        .insert({
+          user_id: uid,
+          service: service.title,
+          category: service.category,
+          fee_paise: service.feePaise,
+          applicant_name: form.name.trim(),
+          licence_no: service.needs.licence ? form.dl.trim() : null,
+          vehicle_no: service.needs.vehicle ? form.vehicle.trim() : null,
+          state: form.state,
+          rto: form.rto,
+          notes: `Mobile ${form.mobile}`,
+          status: "submitted" as const,
+        })
+        .select("reference_no")
+        .single();
+      if (error) throw error;
+      return data.reference_no;
+    },
+    onSuccess: (ref) => setReference(ref),
+  });
+
+  if (reference) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-20">
         <div className="surface-card p-8 text-center">
@@ -123,8 +189,8 @@ function ApplyPage() {
           </p>
           <h1 className="mt-5 text-2xl font-semibold">Application submitted</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Reference number <strong>PS-2026-004512</strong>. Your progress was saved at every step,
-            so a payment gateway timeout would never have lost this form.
+            Reference number <strong className="text-foreground">{reference}</strong>. It is saved in
+            your account with a full status timeline.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
@@ -136,10 +202,10 @@ function ApplyPage() {
             <button
               type="button"
               onClick={() => {
-                setSubmitted(false);
+                setReference(null);
                 setStep(0);
-                setForm(EMPTY);
                 setTouched({});
+                submit.reset();
               }}
               className="tap-target inline-flex items-center rounded-xl border border-input bg-card px-6 text-sm font-semibold"
             >
@@ -153,11 +219,48 @@ function ApplyPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-semibold">Renew my driving licence</h1>
+      <h1 className="text-3xl font-semibold">{service.title}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Official term: Form 9 renewal of driving licence. Takes about 8 minutes. You can leave and
-        come back — nothing is lost.
+        Official term: {service.jargon}. About {service.minutes} minutes · fee{" "}
+        {rupees(service.feePaise)}. Every field validates as you type.
       </p>
+
+      <div className="surface-card mt-6 p-4">
+        <label htmlFor="service-picker" className="block text-sm font-semibold">
+          Which service do you need?
+        </label>
+        <p id="service-picker-help" className="mt-1 text-xs text-muted-foreground">
+          Switching the service updates the required fields and the fee — the form adapts instead of
+          sending you to a different portal.
+        </p>
+        <select
+          id="service-picker"
+          aria-describedby="service-picker-help"
+          value={service.key}
+          onChange={(e) => {
+            setStep(0);
+            setTouched({});
+            void navigate({ to: "/apply", search: { service: e.target.value } });
+          }}
+          className="tap-target mt-3 w-full rounded-xl border border-input bg-background px-4 text-base"
+        >
+          {SERVICES.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.title} · {rupees(s.feePaise)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {sessionQuery.data === null && (
+        <p role="status" className="surface-card mt-6 border-saffron p-4 text-sm">
+          You are browsing as a guest. <strong>Sign in</strong> to save this application and get a
+          reference number.{" "}
+          <Link to="/auth" className="font-semibold text-teal underline">
+            Sign in or create an account
+          </Link>
+        </p>
+      )}
 
       <ol className="mt-8 grid gap-3 sm:grid-cols-3" aria-label="Application progress">
         {STEPS.map((label, i) => {
@@ -192,11 +295,11 @@ function ApplyPage() {
         onSubmit={(e) => {
           e.preventDefault();
           if (step < 2) {
-            (STEP_FIELDS[step] ?? []).forEach((f) => setTouched((t) => ({ ...t, [f]: true })));
+            currentFields.forEach((f) => setTouched((t) => ({ ...t, [f]: true })));
             if (stepValid) setStep(step + 1);
             return;
           }
-          setSubmitted(true);
+          submit.mutate();
         }}
         noValidate
       >
@@ -204,7 +307,7 @@ function ApplyPage() {
           <fieldset className="space-y-6">
             <legend className="font-display text-lg font-semibold">Confirm who you are</legend>
             <Field
-              label="Full name as on licence"
+              label="Full name as on ID"
               help="We match this with your DigiLocker record."
               field="name"
               errors={errors}
@@ -234,20 +337,22 @@ function ApplyPage() {
                 {...fieldProps("mobile")}
               />
             </Field>
-            <Field
-              label="Driving licence number"
-              help="Printed on the front of your licence card, top right."
-              field="dl"
-              errors={errors}
-              touched={touched}
-            >
-              <input
-                type="text"
-                value={form.dl}
-                onChange={(e) => set("dl", e.target.value.toUpperCase())}
-                {...fieldProps("dl")}
-              />
-            </Field>
+            {service.needs.licence && (
+              <Field
+                label="Driving licence number"
+                help="Printed on the front of your licence card, top right."
+                field="dl"
+                errors={errors}
+                touched={touched}
+              >
+                <input
+                  type="text"
+                  value={form.dl}
+                  onChange={(e) => set("dl", e.target.value.toUpperCase())}
+                  {...fieldProps("dl")}
+                />
+              </Field>
+            )}
           </fieldset>
         )}
 
@@ -255,7 +360,7 @@ function ApplyPage() {
           <fieldset className="space-y-6">
             <legend className="font-display text-lg font-semibold">Where you are registered</legend>
             <Field
-              label="Issuing state"
+              label="State"
               help="Choosing a state loads its RTO list instantly — no page reload."
               field="state"
               errors={errors}
@@ -267,7 +372,7 @@ function ApplyPage() {
                 {...fieldProps("state")}
               >
                 <option value="">Select a state</option>
-                {Object.keys(STATES).map((s) => (
+                {Object.keys(RTOS).map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
@@ -278,7 +383,7 @@ function ApplyPage() {
               label="RTO office"
               help={
                 form.state
-                  ? `${STATES[form.state]?.length ?? 0} offices available in ${form.state}.`
+                  ? `${RTOS[form.state]?.length ?? 0} offices available in ${form.state}.`
                   : "Select a state first to see nearby offices."
               }
               field="rto"
@@ -292,27 +397,29 @@ function ApplyPage() {
                 {...fieldProps("rto")}
               >
                 <option value="">Select an RTO</option>
-                {(STATES[form.state] ?? []).map((r) => (
+                {(RTOS[form.state] ?? []).map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field
-              label="Vehicle registration number"
-              help="Used only to check pending tax or challans. Example: MH 12 AB 1234."
-              field="vehicle"
-              errors={errors}
-              touched={touched}
-            >
-              <input
-                type="text"
-                value={form.vehicle}
-                onChange={(e) => set("vehicle", e.target.value.toUpperCase())}
-                {...fieldProps("vehicle")}
-              />
-            </Field>
+            {service.needs.vehicle && (
+              <Field
+                label="Vehicle registration number"
+                help="Used to check pending tax or challans. Example: MH 12 AB 1234."
+                field="vehicle"
+                errors={errors}
+                touched={touched}
+              >
+                <input
+                  type="text"
+                  value={form.vehicle}
+                  onChange={(e) => set("vehicle", e.target.value.toUpperCase())}
+                  {...fieldProps("vehicle")}
+                />
+              </Field>
+            )}
           </fieldset>
         )}
 
@@ -322,13 +429,14 @@ function ApplyPage() {
             <dl className="mt-4 divide-y divide-border">
               {(
                 [
+                  ["Service", service.title],
                   ["Name", form.name],
                   ["Mobile", form.mobile],
-                  ["Licence number", form.dl],
+                  ...(service.needs.licence ? ([["Licence number", form.dl]] as const) : []),
                   ["State", form.state],
                   ["RTO", form.rto],
-                  ["Vehicle", form.vehicle],
-                ] as const
+                  ...(service.needs.vehicle ? ([["Vehicle", form.vehicle]] as const) : []),
+                ] as Array<readonly [string, string]>
               ).map(([k, v]) => (
                 <div key={k} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
                   <dt className="text-muted-foreground">{k}</dt>
@@ -337,8 +445,9 @@ function ApplyPage() {
               ))}
             </dl>
             <p className="mt-4 rounded-xl bg-surface p-4 text-sm text-muted-foreground">
-              Fee payable: <strong className="text-foreground">₹ 416</strong> (renewal ₹ 200 + smart
-              card ₹ 200 + gateway ₹ 16). If payment fails, this application stays saved as a draft.
+              Fee payable:{" "}
+              <strong className="text-foreground">{rupees(service.feePaise)}</strong>. This is a
+              prototype — no real payment is taken and no government record is created.
             </p>
           </div>
         )}
@@ -355,13 +464,33 @@ function ApplyPage() {
           )}
           <button
             type="submit"
-            className="tap-target inline-flex items-center rounded-xl bg-saffron px-6 text-sm font-semibold text-saffron-foreground"
+            disabled={submit.isPending}
+            className="tap-target inline-flex items-center rounded-xl bg-saffron px-6 text-sm font-semibold text-saffron-foreground disabled:opacity-60"
           >
-            {step < 2 ? "Save and continue" : "Pay ₹ 416 and submit"}
+            {step < 2
+              ? "Save and continue"
+              : submit.isPending
+                ? "Submitting…"
+                : `Submit and pay ${rupees(service.feePaise)}`}
           </button>
-          {!stepValid && (STEP_FIELDS[step] ?? []).some((f) => touched[f]) && (
+          {!stepValid && currentFields.some((f) => touched[f]) && (
             <p role="alert" className="w-full text-sm font-medium text-destructive">
               Fix the highlighted fields above to continue.
+            </p>
+          )}
+          {submit.isError && (
+            <p role="alert" className="w-full text-sm font-medium text-destructive">
+              {submit.error instanceof Error && submit.error.message === "SIGN_IN_REQUIRED" ? (
+                <>
+                  Please{" "}
+                  <Link to="/auth" className="underline">
+                    sign in
+                  </Link>{" "}
+                  to submit this application.
+                </>
+              ) : (
+                "Could not submit your application. Please try again."
+              )}
             </p>
           )}
         </div>
@@ -383,7 +512,7 @@ function Field({
   field: keyof Form;
   errors: Partial<Record<keyof Form, string>>;
   touched: Partial<Record<keyof Form, boolean>>;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const show = Boolean(touched[field] && errors[field]);
   return (
